@@ -62,8 +62,9 @@ textarea{background:var(--bg);border:1px solid var(--bd);border-radius:6px;paddi
 <body>
 <header>
   <h1 id="title">Mes proches</h1>
-  <button class="pri" id="addP">Nouvelle personne</button>
+  <button id="ex">Sauvegarder</button><button id="im">Restaurer</button><input type="file" id="imf" accept=".json" hidden><button class="pri" id="addP">Nouvelle personne</button>
 </header>
+<div id="st" class="sm" style="background:var(--bg2);border-bottom:1px solid var(--bd);padding:8px 20px" hidden></div>
 <main id="app"></main>
 
 <dialog id="dP"><h3 style="margin:0">Nouvelle personne</h3>
@@ -105,25 +106,28 @@ function url(b){const u=URL.createObjectURL(b);urls.push(u);return u}
 function clearUrls(){urls.forEach(URL.revokeObjectURL);urls=[]}
 
 async function render(){
-  clearUrls();
+  clearUrls();status();
   const app=$("#app");
   if(open){return renderPerson(app)}
   $("#title").textContent="Mes proches";$("#addP").hidden=false;
   const all=await mAll()||[];
-  const tabs=["Tous",...cats].map(c=>`<button class="tab ${c===cur?"on":""}" data-cat="${esc(c)}">${esc(c)}</button>`).join("");
-  let list=people.filter(p=>(cur==="Tous"||p.cat===cur)&&(`${p.fn} ${p.ln}`).toLowerCase().includes(q));
-  let h=`<div class="tabs">${tabs}<button class="tab" id="newC">+ Catégorie</button><input class="search" id="sr" placeholder="Rechercher" value="${esc(q)}"></div><div class="bar" style="margin-top:0"><button class="pri" id="qb">Ajouter via questionnaire</button></div>`;
-  if(cur!=="Tous"&&!["Famille","Amis","Copine"].includes(cur))h+=`<div class="bar"><span class="sm">Catégorie « ${esc(cur)} »</span><button class="del" id="delC">Supprimer cette catégorie</button></div>`;
+  const cnt=c=>c==="Tous"?people.length:c==="★ Favoris"?people.filter(p=>p.fav).length:people.filter(p=>p.cat===c).length;
+  const tabs=["Tous","★ Favoris",...cats].map(c=>`<button class="tab ${c===cur?"on":""}" data-cat="${esc(c)}">${esc(c)} <span style="opacity:.7">${cnt(c)}</span></button>`).join("");
+  let list=people.filter(p=>(cur==="Tous"||(cur==="★ Favoris"?p.fav:p.cat===cur))&&hay(p).includes(q)).sort((a,b)=>!!b.fav-!!a.fav||(sortBy==="new"?(b.t||0)-(a.t||0):(a.ln+a.fn).localeCompare(b.ln+b.fn)));
+  let h=`<div class="tabs">${tabs}<button class="tab" id="newC">+ Catégorie</button><input class="search" id="sr" placeholder="Rechercher (nom, notes…)" value="${esc(q)}"></div><div class="bar" style="margin-top:0"><button class="pri" id="qb">Ajouter via questionnaire</button><select id="so" style="width:auto"><option value="az" ${sortBy==="az"?"selected":""}>Trier : A à Z</option><option value="new" ${sortBy==="new"?"selected":""}>Trier : récents</option></select></div>`;
+  if(cur!=="Tous"&&cur!=="★ Favoris"&&!["Famille","Amis","Copine"].includes(cur))h+=`<div class="bar"><span class="sm">Catégorie « ${esc(cur)} »</span><button class="del" id="delC">Supprimer cette catégorie</button></div>`;
+  const bd=cur==="Tous"&&!q?bdays():[];
+  if(bd.length)h+=`<div class="info" style="grid-template-columns:1fr;margin:0 0 16px"><b>Prochains anniversaires</b>`+bd.slice(0,4).map(x=>`<div class="sm"><span class="nm">${esc(x.p.fn)} ${esc(x.p.ln)}</span> ${x.j?`dans ${x.j} jour${x.j>1?"s":""}`:"aujourd’hui"}, ${x.age} ans</div>`).join("")+`</div>`;
   if(!list.length)h+=`<div class="empty">${people.length?"Aucun résultat.":"Aucune personne pour l’instant. Crée un premier dossier avec « Nouvelle personne »."}</div>`;
   else h+=`<div class="grid">`+list.map(p=>{
     const ph=all.find(m=>m.pid===p.id&&m.type==="photo");const n=all.filter(m=>m.pid===p.id).length;
     const av=ph?`<img src="${url(ph.blob)}" alt="">`:esc((p.fn[0]||"")+(p.ln[0]||"")).toUpperCase();
-    return `<button class="folder" data-p="${p.id}"><div class="av">${av}</div><div><div class="nm">${esc(p.fn)} ${esc(p.ln)}</div><div class="sm">${esc(p.cat)} · ${n} fichier${n>1?"s":""}</div></div></button>`}).join("")+`</div>`;
+    return `<button class="folder" data-p="${p.id}"><div class="av">${av}</div><div><div class="nm">${p.fav?"★ ":""}${esc(p.fn)} ${esc(p.ln)}</div><div class="sm">${esc(p.cat)} · ${n} fichier${n>1?"s":""}</div></div></button>`}).join("")+`</div>`;
   app.innerHTML=h;
   app.querySelectorAll("[data-cat]").forEach(b=>b.onclick=()=>{cur=b.dataset.cat;render()});
   app.querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>{open=b.dataset.p;render()});
   $("#newC").onclick=()=>{$("#fcn").value="";$("#dC").showModal()};
-  $("#qb").onclick=openQ;
+  $("#qb").onclick=openQ;$("#so").onchange=e=>{sortBy=e.target.value;render()};
   const sr=$("#sr");sr.oninput=()=>{q=sr.value.toLowerCase();const pos=sr.selectionStart;render().then(()=>{const s=$("#sr");s.focus();s.setSelectionRange(pos,pos)})};
   const dc=$("#delC");if(dc)dc.onclick=()=>{if(confirm("Supprimer la catégorie ? Les personnes passeront dans « Autres ».")){people.forEach(p=>{if(p.cat===cur)p.cat="Autres"});if(people.some(p=>p.cat==="Autres")&&!cats.includes("Autres"))cats.push("Autres");cats=cats.filter(c=>c!==cur);cur="Tous";save();render()}};
 }
@@ -135,7 +139,7 @@ async function renderPerson(app){
   const ph=ms.filter(m=>m.type==="photo"),vi=ms.filter(m=>m.type==="video");
   const grid=(arr,t)=>arr.length?`<div class="media">`+arr.map(m=>`<div class="m" data-v="${m.id}">${t==="photo"?`<img src="${url(m.blob)}" alt="">`:`<video src="${url(m.blob)}" preload="metadata" muted></video>`}<button class="x del" data-d="${m.id}" aria-label="Supprimer">×</button></div>`).join("")+`</div>`:`<div class="empty">Aucun${t==="photo"?"e photo":"e vidéo"} dans ce dossier.</div>`;
   app.innerHTML=`<button class="back" id="bk">← Tous les dossiers</button>
-  <div class="bar"><select id="pc" style="width:auto">${opts}</select><span class="sp"></span><button class="pri" id="up">Ajouter photos / vidéos</button><button class="del" id="dp">Supprimer le dossier</button></div>
+  <div class="bar"><select id="pc" style="width:auto">${opts}</select><button id="fv">${p.fav?"★ Favori":"☆ Favori"}</button><button id="rn">Modifier le nom</button><span class="sp"></span><button class="pri" id="up">Ajouter photos / vidéos</button><button class="del" id="dp">Supprimer le dossier</button></div>
   <input type="file" id="fi" accept="image/*,video/*" multiple hidden>${infoForm(p)}${notesHtml(p)}
   <h3>Photos (${ph.length})</h3>${grid(ph,"photo")}<h3 style="margin-top:28px">Vidéos (${vi.length})</h3>${grid(vi,"video")}`;
   $("#bk").onclick=()=>{open=null;render()};
@@ -143,6 +147,7 @@ async function renderPerson(app){
   $("#nn").onclick=()=>openN(p);
   app.querySelectorAll("[data-n]").forEach(c=>c.onclick=e=>{const n=p.notes.find(x=>x.id===c.dataset.n);if(e.target.closest("[data-nd]")){if(confirm("Supprimer cette note ?")){p.notes=p.notes.filter(x=>x!==n);save();render()}return}openN(p,n)});
   $("#pc").onchange=e=>{p.cat=e.target.value;save()};
+  $("#fv").onclick=()=>{p.fav=!p.fav;save();render()};$("#rn").onclick=()=>openEdit(p);
   $("#up").onclick=()=>$("#fi").click();
   $("#fi").onchange=async e=>{for(const f of e.target.files){const type=f.type.startsWith("video")?"video":f.type.startsWith("image")?"photo":null;if(type)await mPut({id:uid(),pid:p.id,type,name:f.name,blob:f})}render()};
   $("#dp").onclick=async()=>{if(!confirm("Supprimer ce dossier et tous ses fichiers ?"))return;for(const m of ms)await mDel(m.id);people=people.filter(x=>x.id!==p.id);save();open=null;render()};
@@ -155,7 +160,7 @@ const sortP=()=>people.sort((a,b)=>(a.ln+a.fn).localeCompare(b.ln+b.fn));
 const enc=o=>"PROCHE:"+btoa(unescape(encodeURIComponent(JSON.stringify(o))));
 const dec=c=>JSON.parse(decodeURIComponent(escape(atob(c.slice(7)))));
 function d2b(d){const[h,b]=d.split(",");const m=h.match(/:(.*?);/)[1],s=atob(b),a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return new Blob([a],{type:m})}
-async function addFrom(d,cat){if(!d||(!d.fn&&!d.ln))throw 0;const p={id:uid(),fn:d.fn||"",ln:d.ln||"",cat,info:d.info||{}};people.push(p);if(d.photo)await mPut({id:uid(),pid:p.id,type:"photo",name:"photo",blob:d2b(d.photo)})}
+async function addFrom(d,cat){if(!d||(!d.fn&&!d.ln))throw 0;const p={id:uid(),fn:d.fn||"",ln:d.ln||"",cat,info:d.info||{},t:Date.now()};people.push(p);if(d.photo)await mPut({id:uid(),pid:p.id,type:"photo",name:"photo",blob:d2b(d.photo)})}
 function openQ(){$("#qc").innerHTML=cats.map(c=>`<option ${c===cur?"selected":""}>${esc(c)}</option>`).join("");$("#qt").value="";$("#qm").textContent="";$("#clm").textContent="";$("#dQ").showModal()}
 $("#cl").onclick=async()=>{const l=location.href.split("#")[0]+"#questionnaire";try{await navigator.clipboard.writeText(l);$("#clm").textContent="Lien copié."}catch(e){prompt("Copie ce lien :",l)}};
 $("#qf").onclick=()=>$("#qfi").click();
@@ -163,7 +168,7 @@ $("#qfi").onchange=async e=>{const t=[];for(const f of e.target.files)t.push(awa
 $("#okQ").onclick=async()=>{const m=$("#qt").value.match(/PROCHE:[A-Za-z0-9+\/=]+/g);if(!m){$("#qm").textContent="Aucune réponse reconnue. Colle le code reçu.";return}const c=$("#qc").value;let n=0;for(const x of m){try{await addFrom(dec(x),c);n++}catch(e){}}if(!n){$("#qm").textContent="Cette réponse n’est pas valide.";return}sortP();save();cur=c;$("#dQ").close();render()};
 function shrink(f){return new Promise(r=>{const i=new Image(),u=URL.createObjectURL(f);i.onload=()=>{const s=Math.min(1,360/Math.max(i.width,i.height)),c=document.createElement("canvas");c.width=i.width*s;c.height=i.height*s;c.getContext("2d").drawImage(i,0,0,c.width,c.height);URL.revokeObjectURL(u);r(c.toDataURL("image/jpeg",.7))};i.onerror=()=>r(null);i.src=u})}
 function showForm(){
-  $("#title").textContent="Questionnaire";$("#addP").hidden=true;
+  $("#title").textContent="Questionnaire";$("#addP").hidden=$("#ex").hidden=$("#im").hidden=true;
   const F=[["fn","Prénom"],["ln","Nom"],["surnom","Surnom"],["anniv","Date d’anniversaire","date"],["ville","Ville"],["tel","Téléphone"]];
   $("#app").innerHTML=`<div class="q"><p>Remplis ce questionnaire, puis envoie la réponse à la personne qui t’a donné le lien. Il faut au moins un prénom ou un nom.</p>`+F.map(([k,l,t])=>`<label>${l}</label><input id="q_${k}" type="${t||"text"}">`).join("")+`<label>Ce que tu aimes</label><textarea id="q_aime" rows="2"></textarea><label>Un petit mot</label><textarea id="q_note" rows="3"></textarea><label>Une photo (facultatif)</label><input id="q_photo" type="file" accept="image/*"><div class="bar"><button class="pri" id="q_go">Créer ma réponse</button><span class="sm" id="q_m"></span></div><div id="q_out"></div></div>`;
   $("#q_go").onclick=async()=>{const g=k=>$("#q_"+k).value.trim(),fn=g("fn"),ln=g("ln");if(!fn&&!ln){$("#q_m").textContent="Écris au moins ton prénom ou ton nom.";return}$("#q_m").textContent="";const info={};["surnom","anniv","ville","tel","aime","note"].forEach(k=>{if(g(k))info[k]=g(k)});const d={fn,ln,info},f=$("#q_photo").files[0];if(f)d.photo=await shrink(f);const code=enc(d);
@@ -177,12 +182,23 @@ function notesHtml(p){const n=p.notes||[];return `<div class="bar" style="margin
 let editN=null,editP=null;
 function openN(p,n){editP=p;editN=n||null;$("#nt").value=n?n.t:"";$("#nx").value=n?n.x:"";$("#dN").showModal();$("#nx").focus()}
 $("#okN").onclick=()=>{const t=$("#nt").value.trim(),x=$("#nx").value.trim();if(!t&&!x)return;editP.notes=editP.notes||[];if(editN){editN.t=t;editN.x=x}else editP.notes.push({id:uid(),t,x});save();$("#dN").close();render()};
+let edP=null;
+function openEdit(p){edP=p;$("#dP h3").textContent="Modifier le nom";$("#fc").innerHTML=cats.map(c=>`<option ${c===p.cat?"selected":""}>${esc(c)}</option>`).join("");$("#fp").value=p.fn;$("#fn").value=p.ln;$("#okP").textContent="Enregistrer";$("#dP").showModal()}
+$("#dP").addEventListener("close",()=>{edP=null;$("#dP h3").textContent="Nouvelle personne";$("#okP").textContent="Créer le dossier"});
+function bdays(){const t=new Date();t.setHours(0,0,0,0);return people.filter(p=>p.info&&p.info.anniv).map(p=>{const[y,m,d]=p.info.anniv.split("-").map(Number);let n=new Date(t.getFullYear(),m-1,d);if(n<t)n=new Date(t.getFullYear()+1,m-1,d);return{p,j:Math.round((n-t)/864e5),age:n.getFullYear()-y}}).filter(x=>x.j<=60).sort((a,b)=>a.j-b.j)}
+const b2d=b=>new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)});
+$("#ex").onclick=async()=>{const m=(await mAll())||[],o={v:1,cats,people,media:[]};for(const x of m)o.media.push({id:x.id,pid:x.pid,type:x.type,name:x.name,data:await b2d(x.blob)});const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(o)],{type:"application/json"}));a.download="mes-proches-sauvegarde.json";a.click();lastB=Date.now();kvSet("lastB",lastB);status()};
+$("#im").onclick=()=>$("#imf").click();
+$("#imf").onchange=async e=>{const f=e.target.files[0];e.target.value="";if(!f)return;try{const d=JSON.parse(await f.text());if(!Array.isArray(d.people)||!confirm("Remplacer toutes les données actuelles par cette sauvegarde ?"))return;for(const x of(await mAll())||[])await mDel(x.id);cats=d.cats;people=d.people;for(const x of d.media||[])await mPut({id:x.id,pid:x.pid,type:x.type,name:x.name,blob:d2b(x.data)});save();open=null;cur="Tous";render()}catch(err){alert("Fichier de sauvegarde invalide.")}};
+let lastB=0,sortBy="az";
+const hay=p=>[p.fn,p.ln,p.cat,...Object.values(p.info||{}),...(p.notes||[]).flatMap(n=>[n.t,n.x])].join(" ").toLowerCase();
+function status(){const el=$("#st");if(!el)return;let m="";if(!db)m="Le stockage n’est pas disponible dans ce navigateur : tes données seront perdues à la fermeture. Utilise « Sauvegarder » régulièrement.";else if(people.length){const d=lastB?Math.floor((Date.now()-lastB)/864e5):null;if(d===null)m="Tes données sont gardées sur cet appareil. Pense à faire une première sauvegarde.";else if(d>=7)m=`Dernière sauvegarde il y a ${d} jours. Pense à en refaire une.`}el.textContent=m;el.hidden=!m}
 document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>b.closest("dialog").close());
 $("#lb").addEventListener("close",()=>{$("#lbc").innerHTML=""});
 $("#addP").onclick=()=>{$("#fc").innerHTML=cats.map(c=>`<option>${esc(c)}</option>`).join("");if(cats.includes(cur))$("#fc").value=cur;$("#fp").value="";$("#fn").value="";$("#dP").showModal();$("#fp").focus()};
-$("#okP").onclick=()=>{const fn=$("#fp").value.trim(),ln=$("#fn").value.trim();if(!fn&&!ln)return;people.push({id:uid(),fn,ln,cat:$("#fc").value});people.sort((a,b)=>(a.ln+a.fn).localeCompare(b.ln+b.fn));save();$("#dP").close();render()};
+$("#okP").onclick=()=>{const fn=$("#fp").value.trim(),ln=$("#fn").value.trim();if(!fn&&!ln)return;if(edP)Object.assign(edP,{fn,ln,cat:$("#fc").value});else people.push({id:uid(),fn,ln,cat:$("#fc").value,info:{},notes:[],t:Date.now()});people.sort((a,b)=>(a.ln+a.fn).localeCompare(b.ln+b.fn));save();$("#dP").close();render()};
 $("#okC").onclick=()=>{const n=$("#fcn").value.trim();if(!n||cats.includes(n))return;cats.push(n);cur=n;save();$("#dC").close();render()};
-if(location.hash==="#questionnaire")showForm();else(async()=>{await idb();cats=(await kvGet("cats"))||cats;people=(await kvGet("people"))||[];render()})();
+if(location.hash==="#questionnaire")showForm();else(async()=>{await idb();cats=(await kvGet("cats"))||cats;people=(await kvGet("people"))||[];lastB=(await kvGet("lastB"))||0;try{navigator.storage.persist()}catch(e){}render()})();
 </script>
 </body>
 </html>
