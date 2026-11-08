@@ -75,7 +75,8 @@ textarea{background:var(--bg);border:1px solid var(--bd);border-radius:6px;paddi
   <div class="row"><button data-close>Annuler</button><button class="pri" id="okC">Ajouter</button></div></dialog>
 <dialog id="dQ" style="width:min(460px,92vw)"><h3 style="margin:0">Ajouter via questionnaire</h3>
   <p class="sm" style="margin:10px 0 0">1. Envoie ce lien à la personne. Elle remplit le questionnaire et te renvoie sa réponse.</p>
-  <div class="bar" style="margin:8px 0"><button id="cl">Copier le lien</button><span class="sm" id="clm"></span></div>
+  <input id="lk" readonly style="margin-top:8px">
+  <div class="bar" style="margin:8px 0"><button id="cl">Copier le lien</button><button id="sh">Partager</button><span class="sm" id="clm"></span></div>
   <p class="sm" style="margin:8px 0 0">2. Colle sa réponse ici, ou choisis le fichier reçu.</p>
   <label>Catégorie</label><select id="qc"></select>
   <label>Réponse reçue</label><textarea id="qt" rows="4"></textarea>
@@ -161,8 +162,11 @@ const enc=o=>"PROCHE:"+btoa(unescape(encodeURIComponent(JSON.stringify(o))));
 const dec=c=>JSON.parse(decodeURIComponent(escape(atob(c.slice(7)))));
 function d2b(d){const[h,b]=d.split(",");const m=h.match(/:(.*?);/)[1],s=atob(b),a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return new Blob([a],{type:m})}
 async function addFrom(d,cat){if(!d||(!d.fn&&!d.ln))throw 0;const p={id:uid(),fn:d.fn||"",ln:d.ln||"",cat,info:d.info||{},t:Date.now()};people.push(p);if(d.photo)await mPut({id:uid(),pid:p.id,type:"photo",name:"photo",blob:d2b(d.photo)})}
-function openQ(){$("#qc").innerHTML=cats.map(c=>`<option ${c===cur?"selected":""}>${esc(c)}</option>`).join("");$("#qt").value="";$("#qm").textContent="";$("#clm").textContent="";$("#dQ").showModal()}
-$("#cl").onclick=async()=>{const l=location.href.split("#")[0]+"#questionnaire";try{await navigator.clipboard.writeText(l);$("#clm").textContent="Lien copié."}catch(e){prompt("Copie ce lien :",l)}};
+function openQ(){$("#qc").innerHTML=cats.map(c=>`<option ${c===cur?"selected":""}>${esc(c)}</option>`).join("");$("#qt").value="";$("#qm").textContent="";$("#clm").textContent="";$("#lk").value=qlink();$("#dQ").showModal()}
+const qlink=()=>{const h=location.href.split("#")[0].split("?")[0];return(/^https?:/.test(h)&&!/claude/.test(h)?h:"https://zerfixoff-a11y.github.io/perssonne-/")+"#questionnaire"};
+$("#lk").onclick=e=>e.target.select();
+$("#cl").onclick=async()=>{const l=qlink(),i=$("#lk");i.value=l;i.select();let ok=false;try{await navigator.clipboard.writeText(l);ok=true}catch(e){try{ok=document.execCommand("copy")}catch(e2){}}$("#clm").textContent=ok?"Lien copié.":"Appuie longuement sur le lien ci-dessus pour le copier."};
+$("#sh").onclick=async()=>{const l=qlink();if(navigator.share){try{await navigator.share({title:"Questionnaire",text:"Remplis ce questionnaire :",url:l})}catch(e){}}else $("#clm").textContent="Partage indisponible : copie le lien ci-dessus."};
 $("#qf").onclick=()=>$("#qfi").click();
 $("#qfi").onchange=async e=>{const t=[];for(const f of e.target.files)t.push(await f.text());$("#qt").value=t.join("\n");e.target.value=""};
 $("#okQ").onclick=async()=>{const m=$("#qt").value.match(/PROCHE:[A-Za-z0-9+\/=]+/g);if(!m){$("#qm").textContent="Aucune réponse reconnue. Colle le code reçu.";return}const c=$("#qc").value;let n=0;for(const x of m){try{await addFrom(dec(x),c);n++}catch(e){}}if(!n){$("#qm").textContent="Cette réponse n’est pas valide.";return}sortP();save();cur=c;$("#dQ").close();render()};
